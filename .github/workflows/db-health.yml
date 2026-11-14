@@ -16,9 +16,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'dry_run=送らない / test_notify=試験通知を通常の通知先にだけ1回 / live=通常どおり'
+        description: 'dry_run=送らない / test_notify=試験通知を通常の通知先にだけ1回 / verify_webhooks=送らずに通知先を確かめる / live=通常どおり'
         type: choice
-        options: [dry_run, test_notify, live]
+        options: [dry_run, test_notify, verify_webhooks, live]
         default: dry_run
 
 concurrency:
@@ -54,6 +54,9 @@ jobs:
           DISCORD_WEBHOOK_URL_ALERT: ${{ secrets.DB_HEALTH_DISCORD_WEBHOOK_ALERT }}
           DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'dry_run') && '1' || '0' }}
           TEST_NOTIFY: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'test_notify') && '1' || '0' }}
+          VERIFY_WEBHOOKS: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'verify_webhooks') && '1' || '0' }}
+          EXPECT_CHANNEL_NORMAL: ${{ vars.DB_HEALTH_CHANNEL_NORMAL }}
+          EXPECT_CHANNEL_ALERT: ${{ vars.DB_HEALTH_CHANNEL_ALERT }}
         run: node scripts/monitor/db-health.mjs
       - name: 今回の状態を残す
         if: always() && (github.event_name == 'schedule' || inputs.mode == 'live')

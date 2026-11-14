@@ -110,7 +110,25 @@ async function post(text, opts = {}) {
   }
 }
 
+/** Webhook を送らずに確かめる（GET は投稿せず、Webhook の情報だけ返す）。URL・名前は出さず「一致／不一致」だけ出す */
+async function verifyWebhooks() {
+  let bad = 0;
+  for (const [label, url, expect] of [['通常の通知先', WEBHOOK, process.env.EXPECT_CHANNEL_NORMAL], ['🔴 用の通知先', ALERT_WEBHOOK, process.env.EXPECT_CHANNEL_ALERT]]) {
+    if (!url) { console.log(`${label}: 未登録`); bad++; continue; }
+    if (!/^https:\/\/(discord|discordapp)\.com\/api\/webhooks\/\d+\/[\w-]+$/.test(url.trim())) { console.log(`${label}: Webhook の URL の形ではありません`); bad++; continue; }
+    const res = await fetch(url.trim(), { signal: AbortSignal.timeout(TIMEOUT_MS) }).catch(() => null);
+    if (!res || !res.ok) { console.log(`${label}: Discord が受け付けません（HTTP ${res?.status ?? '接続失敗'}）`); bad++; continue; }
+    const j = await res.json().catch(() => ({}));
+    const hit = expect ? String(j.channel_id) === String(expect) : null;
+    console.log(`${label}: 有効・チャンネル ${hit === null ? '（照合先の指定なし）' : hit ? '一致' : '不一致'}`);
+    if (hit === false) bad++;
+  }
+  if (WEBHOOK && ALERT_WEBHOOK && WEBHOOK.trim() === ALERT_WEBHOOK.trim()) { console.log('2 本が同じ URL です'); bad++; }
+  process.exit(bad ? 1 : 0);
+}
+
 async function main() {
+  if (process.env.VERIFY_WEBHOOKS === '1') return verifyWebhooks();
   let targets;
   try { targets = JSON.parse(process.env.DB_HEALTH_TARGETS || '[]'); } catch { console.error('DB_HEALTH_TARGETS が JSON ではありません'); process.exit(2); }
   if (!targets.length) { console.error('DB_HEALTH_TARGETS が空です'); process.exit(2); }
