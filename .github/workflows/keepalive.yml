@@ -1,0 +1,20 @@
+name: Keepalive
+
+# 公開リポジトリの定期実行は、60 日間リポジトリに動きが無いと GitHub が自動で止める。
+# 月に 1 回、見守りのワークフローを「有効にする」操作をして止まらないようにする（コードは変えない）。
+on:
+  schedule:
+    - cron: '17 3 1 * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/db-health.yml/enable"

@@ -1,0 +1,63 @@
+name: DB Health Monitor
+
+# Supabase の DB が止まる前・止まったときに Discord へ知らせる。中身は scripts/monitor/db-health.mjs。
+# DB に頼らない場所（GitHub）から、公開用の鍵で 1 行だけ読む。
+#
+# 必要な設定（Settings → Secrets and variables → Actions）:
+#   Secrets  DB_HEALTH_TARGETS               対象の一覧（JSON）
+#            DB_HEALTH_DISCORD_WEBHOOK       すべての通知を送る Webhook
+#            DB_HEALTH_DISCORD_WEBHOOK_ALERT 🔴 だけ送る Webhook（任意）
+#   Variables DB_HEALTH_ENABLED=true         これが無い間は、定期実行が来ても何もしない
+# 止めるとき: Variables の DB_HEALTH_ENABLED を消す（または false）。
+# 実行記録は公開されるので、対象の名前・URL・文面は出さない（スクリプト側で番号だけにしている）。
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'dry_run=送らない / test_notify=試験通知を通常の通知先にだけ1回 / live=通常どおり'
+        type: choice
+        options: [dry_run, test_notify, live]
+        default: dry_run
+
+concurrency:
+  group: db-health
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: vars.DB_HEALTH_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/monitor
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: 前回の状態を読む
+        if: github.event_name == 'schedule' || inputs.mode == 'live'
+        uses: actions/cache/restore@v4
+        with:
+          path: .db-health-state.json
+          key: db-health-${{ github.run_id }}
+          restore-keys: db-health-
+      - name: 確かめる
+        env:
+          DB_HEALTH_TARGETS: ${{ secrets.DB_HEALTH_TARGETS }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DB_HEALTH_DISCORD_WEBHOOK }}
+          DISCORD_WEBHOOK_URL_ALERT: ${{ secrets.DB_HEALTH_DISCORD_WEBHOOK_ALERT }}
+          DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'dry_run') && '1' || '0' }}
+          TEST_NOTIFY: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'test_notify') && '1' || '0' }}
+        run: node scripts/monitor/db-health.mjs
+      - name: 今回の状態を残す
+        if: always() && (github.event_name == 'schedule' || inputs.mode == 'live')
+        uses: actions/cache/save@v4
+        with:
+          path: .db-health-state.json
+          key: db-health-${{ github.run_id }}
