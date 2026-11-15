@@ -12,7 +12,7 @@ name: DB Health Monitor
 # 実行記録は公開されるので、対象の名前・URL・文面は出さない（スクリプト側で番号だけにしている）。
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '7-59/10 * * * *'
   workflow_dispatch:
     inputs:
       mode:
