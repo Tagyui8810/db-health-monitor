@@ -8,11 +8,16 @@ name: DB Health Monitor
 #            DB_HEALTH_DISCORD_WEBHOOK       すべての通知を送る Webhook
 #            DB_HEALTH_DISCORD_WEBHOOK_ALERT 🔴 だけ送る Webhook（任意）
 #   Variables DB_HEALTH_ENABLED=true         これが無い間は、定期実行が来ても何もしない
-# 止めるとき: Variables の DB_HEALTH_ENABLED を消す（または false）。
+# 止めるとき: Variables の DB_HEALTH_ENABLED を消す（または false）。live の実行が来ても何もしなくなる（試し実行は動く）。
+#
+# 10 分ごとの実行は外（cron-job.org）から GitHub の API で「手動実行（mode=live）」を呼んで行う（2026-11-15〜）。
+# GitHub の schedule はこのリポジトリでは一度も動かなかったので外した（残すと、動き出したときに 2 本立てになり、
+# 「2 回続けて失敗」の数え方が早まる）。呼び出し:
+#   POST https://api.github.com/repos/<owner>/db-health-monitor/actions/workflows/db-health.yml/dispatches
+#   本文 {"ref":"main","inputs":{"mode":"live"}}（鍵は呼ぶ側にだけ置く。ここには書かない）
 # 実行記録は公開されるので、対象の名前・URL・文面は出さない（スクリプト側で番号だけにしている）。
+run-name: "DB Health Monitor (${{ inputs.mode || github.event_name }})"
 on:
-  schedule:
-    - cron: '7-59/10 * * * *'
   workflow_dispatch:
     inputs:
       mode:
@@ -30,7 +35,8 @@ permissions:
 
 jobs:
   check:
-    if: vars.DB_HEALTH_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
+    # live（10 分ごとの本番の確かめ）は DB_HEALTH_ENABLED=true のときだけ。dry_run などの試しはいつでも動く
+    if: vars.DB_HEALTH_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'live')
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
